@@ -119,15 +119,21 @@ seller 30
 http://www.sqlfiddle.com/#!5/7b358/1
 
 
-Pontos positivos:
+
+### Vantagens e Desvantagens
+
+#### Pontos positivos:
 
 - Facilidade e rapidez de implementar
+- Queries podem ser traduzidas com facilidade para o modelo do Django Admin
+- Não requer infra especial
 
 
-Pontos negativos:
+#### Pontos negativos:
 
 - CounterShippingPackage tende a crescer muito, dificultando a busca
 - Tempo de execução e ocupação do banco operacional (Loggi Web)
+- A lista dos pacotes poderia ser buscada numa única query, mas o problema do desempenho tende a crescer cada vez mais.
 
 
 ## Solução por Redis (NoSQL chave-valor)
