@@ -188,7 +188,7 @@ lpush SELLER:10 AAAAAA
 lpush SELLER:10 BBBBBB
 ```
 
-### Verificando a idade da chave
+### Verificando a idade das chaves de seller
 
 ```
 keys "SELLER:*"
