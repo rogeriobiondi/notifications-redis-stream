@@ -194,7 +194,7 @@ lpush SELLER:10 BBBBBB
 keys "SELLER:*"
 ```
 
-Para cada chave que receber (iterate), obter o tempo de vida da chave:
+Para cada chave que receber (iterate), obter o tempo de vida dela:
 
 ```
 OBJECT IDLETIME SELLER:10
