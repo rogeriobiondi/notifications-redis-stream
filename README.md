@@ -219,11 +219,13 @@ XTRIM packages MAXLEN ~ 10000
 - Rápido e fácil de implementar
 - Trabalha fora da base do Loggi Web
 - Solução auto mantida (limpeza das chaves e trimming do stream)
+- Escala com facilidade (via `XGROUP`)
 
 #### Pontos negativos
 
-- Escala conforme o número de sellers, mas só os sellers que estiverem dropando pacotes é que ocuparão a memória do cache
+- Escala conforme o número de sellers, mas só os sellers que estiverem dropando pacotes é que ocuparão a memória do cache.
 - Os dados vivem no cache por um período muito curto de tempo
+- Reparação de falhas é mais trabalhosa.
 - Loggi compliant???
 
 ### Demonstração
