@@ -1,0 +1,3 @@
+redis==4.3.4
+pykSQL==0.11.0
+kafka-python==2.0.2

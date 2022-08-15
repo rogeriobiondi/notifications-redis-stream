@@ -45,7 +45,11 @@ insert into CounterShippingPackage  values
 (10, 'BBBBBB', '2022-06-28 19:36:00'),
 (10, 'CCCCCC', '2022-06-28 19:36:30'),
 (20, 'XXXXXX', '2022-06-28 19:35:10'),
-(20, 'YYYYYY', '2022-06-28 19:35:20');
+(20, 'YYYYYY', '2022-06-28 19:35:20'),
+(30, 'ZZZZZZ', '2022-06-28 19:35:06'),
+(30, 'TTTTTT', '2022-06-28 19:35:08'),
+
+;
 
 SELECT seller_id, date_time
 FROM CounterShippingPackage
@@ -239,8 +243,8 @@ pyenv install 3.10.4
 
 # configurar pyenv
 cd redis-notifications
-pyenv virtualenv 3.10.4 redis-notifications
-pyenv local redis-notifications
+pyenv virtualenv 3.10.4 notify
+pyenv local notify
 python -m pip install --upgrade pip
 ``` 
 
@@ -273,4 +277,151 @@ python publisher.py 10 CCCCCC
 python publisher.py 20 XXXXXX
 python publisher.py 20 YYYYYY
 ...
+```
+
+## Solução por mensageria (kSQL)
+
+Inicie o ambiente
+
+```
+cd ksql
+docker-compose up -d
+```
+
+Inicie o ksql-cli:
+
+```
+docker exec -ti ksqldb-cli ksql http://ksqldb-server:8088
+``` 
+
+Criar um Stream para os pacotes
+
+```
+drop stream if exists package_stream delete topic;
+
+create STREAM package_stream (
+   seller_id   INTEGER, 
+   package_id  VARCHAR,
+   date_time   VARCHAR
+) with ( 
+   kafka_topic='package_topic',
+   timestamp='date_time',
+   timestamp_format='yyyy-MM-dd''T''HH:mm:ss', 
+   value_format='json', 
+   partitions=1
+);
+
+show streams;
+
+show topics;
+```
+
+
+select seller_id, package_id, date_time,
+       convert_tz(from_unixtime(unix_timestamp()), 'UTC', 'America/Sao_Paulo') as now,
+       convert_tz(from_unixtime(unix_timestamp(date_time)), 'America/Sao_Paulo', 'America/Sao_Paulo') as event,
+       unix_timestamp(convert_tz(from_unixtime(unix_timestamp()), 'UTC', 'America/Sao_Paulo')) -
+       unix_timestamp(convert_tz(from_unixtime(unix_timestamp(date_time)), 'America/Sao_Paulo', 'America/Sao_Paulo'))
+       as delta
+from   package_stream
+where  
+       (unix_timestamp(convert_tz(from_unixtime(unix_timestamp()), 'UTC', 'America/Sao_Paulo')) -
+       unix_timestamp(convert_tz(from_unixtime(unix_timestamp(date_time)), 'America/Sao_Paulo', 'America/Sao_Paulo'))) > 30000;
+
+
+
+select seller_id, topkdistinct(package_id, 100)
+from   package_stream
+window tumbling (size 3 minutes) group by seller_id
+emit changes;
+
+
+
+where  
+       (unix_timestamp(convert_tz(from_unixtime(unix_timestamp()), 'UTC', 'America/Sao_Paulo')) -
+       unix_timestamp(convert_tz(from_unixtime(unix_timestamp(date_time)), 'America/Sao_Paulo', 'America/Sao_Paulo'))) > 30000;
+group by seller_id;
+
+
+
+
+
+
+
+Criar uma view materializada para agregar as informações:
+
+```
+###
+### A view materializada traz os últimos 100 pacotes de cada seller no intervalo de 30 segundos
+###
+
+
+
+drop table if exists packages_by_seller;
+
+create stream packages_by_seller_stream as
+   select   seller_id, package_id 
+   from     package_stream 
+   where    unix_timestamp(date_time) >= (unix_timestamp() - 30000);
+
+
+
+
+   select   seller_id, TOPKDISTINCT(package_id, 100) packages 
+   from     package_stream 
+   where    rowtime >=  (unix_timestamp() - 30000)
+   and      rowtime <=  unix_timestamp()
+   group by seller_id;
+
+select seller_id, packages from packages_by_seller; 
+
+
+
+
+drop table if exists packages_by_seller;
+
+create table packages_by_seller as
+   select seller_id, TOPKDISTINCT(package_id, 100) packages
+   from   package_stream
+   window tumbling ( size 1 minutes )
+   group by seller_id;
+
+show tables;
+
+select seller_id, packages from packages_by_seller emit changes;
+
+```
+
+Abrir um outro terminal com o kSQL Cli:
+
+```
+docker exec -ti ksqldb-cli ksql http://ksqldb-server:8088
+```
+
+
+Inserir dados de teste no stream:
+
+
+```
+INSERT INTO package_stream (seller_id, package_id, date_time) VALUES (10, 'AAAAAA', '2022-06-28T19:35:00');
+INSERT INTO package_stream (seller_id, package_id, date_time) VALUES (10, 'BBBBBB', '2022-06-28T19:36:00');
+INSERT INTO package_stream (seller_id, package_id, date_time) VALUES (10, 'CCCCCC', '2022-06-28T19:36:30');
+INSERT INTO package_stream (seller_id, package_id, date_time) VALUES (20, 'XXXXXX', '2022-06-28T19:35:10');
+INSERT INTO package_stream (seller_id, package_id, date_time) VALUES (20, 'YYYYYY', '2022-06-28T19:35:20');
+INSERT INTO package_stream (seller_id, package_id, date_time) VALUES (30, 'ZZZZZZ', '2022-06-28T19:35:06');
+INSERT INTO package_stream (seller_id, package_id, date_time) VALUES (30, 'TTTTTT', '2022-06-28T19:35:08');
+
+``` 
+
+Na primeira janela, rodar uma query sobre a view materializada para buscar os dados dos pacotes dos últimos trinta segundos:
+
+```
+select seller_id, packages from packages_by_seller;
+
++-------------+-------------------------+
+|SELLER_ID    | PACKAGES                |
++-------------+-------------------------+
+|10           |[CCCCCC, BBBBBB, AAAAAA] |
+|20           |[YYYYYY, XXXXXX]         |
+|30           |[ZZZZZZ, TTTTTT]         |
 ```
